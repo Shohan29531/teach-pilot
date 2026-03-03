@@ -499,7 +499,9 @@ def _sidebar(models: List[str]) -> Tuple[str, str, Dict[str, Any]]:
     with st.sidebar.container():
         hdr_cols = st.columns([0.90, 0.10])
         with hdr_cols[0]:
-            st.markdown("**Bring your own API key** *(optional — faster responses)*")
+            st.markdown("**Bring your own API key**")
+            st.markdown("*(optional — faster responses)*")
+            
         with hdr_cols[1]:
             # Prefer a popover so the UI stays compact; fall back to a simple link.
             try:
