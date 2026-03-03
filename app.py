@@ -20,6 +20,8 @@ from lib.storage import (
     upsert_user,
     verify_user,
     change_user_password,
+    get_user_api_key,
+    set_user_api_key,
     create_session,
     get_session,
     delete_session,
@@ -70,6 +72,25 @@ def _secret(key: str, default: Optional[str] = None) -> Optional[str]:
 
 OLLAMA_HOST = _secret("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_API_KEY = _secret("OLLAMA_API_KEY")
+
+
+def _effective_api_key() -> Optional[str]:
+    """Return the API key to use for model calls.
+
+    Preference order:
+      1) User-saved key (BYOK)
+      2) Instructor/server key (OLLAMA_API_KEY)
+    """
+    uid = st.session_state.get("user_id")
+    if uid:
+        try:
+            k = get_user_api_key(str(uid))
+            if k:
+                return k
+        except Exception:
+            pass
+    return OLLAMA_API_KEY
+
 
 MODEL_SETTING_KEY = "active_model"
 
@@ -467,6 +488,56 @@ def _sidebar(models: List[str]) -> Tuple[str, str, Dict[str, Any]]:
     role = st.session_state["role"]
     is_admin = role == "admin"
 
+
+    # Bring-your-own API key (per user, optional)
+    # If a user saves a key, we prefer it over the instructor/server key for model calls.
+    try:
+        saved_key = get_user_api_key(user_id)
+    except Exception:
+        saved_key = None
+
+    with st.sidebar.container():
+        hdr_cols = st.columns([0.90, 0.10])
+        with hdr_cols[0]:
+            st.markdown("**Bring your own API key** *(optional — faster responses)*")
+        with hdr_cols[1]:
+            # Prefer a popover so the UI stays compact; fall back to a simple link.
+            try:
+                with st.popover("ℹ️"):
+                    st.markdown("Get your key from: [Ollama API keys](https://ollama.com/settings/keys)")
+            except Exception:
+                st.markdown("[ℹ️](https://ollama.com/settings/keys)")
+
+        if saved_key:
+            st.caption("✅ Using your personal API key for model calls.")
+        else:
+            st.caption("Using the instructor-provided API key.")
+
+        api_input = st.text_input(
+            "Ollama API key",
+            type="password",
+            key="byok_api_key",
+            placeholder="Paste your Ollama API key here",
+            label_visibility="collapsed",
+        )
+
+        btn_cols = st.columns([0.55, 0.45])
+        if btn_cols[0].button("Save key", key="byok_save_key", type="primary"):
+            if not api_input.strip():
+                st.error("Please paste a key (or use 'Use instructor key' to clear).")
+            else:
+                set_user_api_key(user_id, api_input.strip())
+                st.success("Saved. Your next requests will use your key.")
+                st.rerun()
+
+        if saved_key:
+            if btn_cols[1].button("Use instructor key", key="byok_clear_key"):
+                set_user_api_key(user_id, None)
+                st.success("Cleared. Your next requests will use the instructor key.")
+                st.rerun()
+
+    st.sidebar.divider()
+
     st.sidebar.markdown(f"### {APP_NAME}")
     st.sidebar.caption(f"Signed in as **{user_id}** ({role})")
 
@@ -715,7 +786,7 @@ def _chat_page(active_model: str, active_assignment: Dict[str, Any]) -> None:
                 try:
                     for chunk in chat_stream(
                         host=OLLAMA_HOST,
-                        api_key=OLLAMA_API_KEY,
+                        api_key=_effective_api_key(),
                         model=active_model,
                         messages=payload,
                         options=None,
@@ -847,7 +918,7 @@ def _chat_page(active_model: str, active_assignment: Dict[str, Any]) -> None:
         try:
             for chunk in chat_stream(
                 host=OLLAMA_HOST,
-                api_key=OLLAMA_API_KEY,
+                api_key=_effective_api_key(),
                 model=active_model,
                 messages=payload,
                 options=None,

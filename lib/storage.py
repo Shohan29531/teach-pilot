@@ -327,7 +327,10 @@ def init_db() -> None:
         """,
     )
 
-    # Lightweight migrations for older schemas
+    
+    # users (optional per-user API key)
+    _add_column("users", "api_key", "TEXT")
+# Lightweight migrations for older schemas
     # conversations new columns
     _add_column("conversations", "base_prompt", "TEXT")
     _add_column("conversations", "assignment_id", "INTEGER")
@@ -651,6 +654,33 @@ def change_user_password(user_id: str, current_password: str, new_password: str)
 def list_users() -> List[Dict[str, Any]]:
     rows = _exec("SELECT user_id, role FROM users ORDER BY user_id", fetch="all")
     return _rows_to_dicts(rows)
+
+
+def get_user_api_key(user_id: str) -> Optional[str]:
+    """Return a user's saved Ollama API key (if any)."""
+    row = _exec(
+        "SELECT api_key FROM users WHERE user_id = ?" if not _USE_PG else "SELECT api_key FROM users WHERE user_id = %s",
+        (user_id,),
+        fetch="one",
+    )
+    if not row:
+        return None
+    if isinstance(row, dict):
+        return row.get("api_key") or None
+    return row[0] or None
+
+
+def set_user_api_key(user_id: str, api_key: Optional[str]) -> None:
+    """Set or clear a user's saved Ollama API key.
+
+    Pass None/empty to clear (revert to the instructor-provided key).
+    """
+    key = (api_key or "").strip()
+    val: Optional[str] = key if key else None
+    _exec(
+        "UPDATE users SET api_key = ? WHERE user_id = ?" if not _USE_PG else "UPDATE users SET api_key = %s WHERE user_id = %s",
+        (val, user_id),
+    )
 
 
 def create_session(user_id: str, role: str, hours: int = 12) -> str:
