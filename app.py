@@ -497,6 +497,9 @@ def _sidebar(models: List[str]) -> Tuple[str, str, Dict[str, Any]]:
         saved_key = None
 
     with st.sidebar.container():
+        if "byok_help_open" not in st.session_state:
+            st.session_state.byok_help_open = False
+
         hdr_cols = st.columns([0.88, 0.12], vertical_alignment="center")
 
         with hdr_cols[0]:
@@ -504,12 +507,12 @@ def _sidebar(models: List[str]) -> Tuple[str, str, Dict[str, Any]]:
             st.caption("Optional — faster responses")
 
         with hdr_cols[1]:
-            # Keep help compact and avoid overlap: use a small button that opens a popover
-            try:
-                with st.popover("ℹ️", use_container_width=True):
-                    st.markdown("Get your key here: [Ollama API keys](https://ollama.com/settings/keys)")
-            except Exception:
-                st.link_button("ℹ️", "https://ollama.com/settings/keys")
+            # Avoid popover (it adds a dropdown chevron that overlaps the icon)
+            if st.button("ℹ️", key="byok_help_btn", help="Where to get your Ollama API key"):
+                st.session_state.byok_help_open = not st.session_state.byok_help_open
+
+        if st.session_state.byok_help_open:
+            st.markdown("Get your key here: [Ollama API keys](https://ollama.com/settings/keys)")
 
         if saved_key:
             st.caption("✅ Using your personal API key for model calls.")
